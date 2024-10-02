@@ -8,4 +8,4 @@ Minecraft Clone in Python with library Ursina
 - some optimization
 
 
-Libraries: Ursina, condigparser, noise
+Libraries: Ursina, configparser, noise
