@@ -6,3 +6,6 @@ Minecraft Clone in Python with library Ursina
 - level save
 - files are classes
 - some optimization
+
+
+Libraries: Ursina, condigparser, noise
