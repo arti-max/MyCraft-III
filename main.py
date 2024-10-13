@@ -5,8 +5,10 @@ from ui import UI
 from configManager import ConfigManager
 from soundManager import SoundManager
 from entity import EntityObject
+from mod import Mod
 import random
 import configparser
+import os
 
 app = Ursina(title="MyCraft III", icon="res/stone.ico", development_mode=False, borderless=False)
 window.exit_button.enabled = False
@@ -14,6 +16,7 @@ window.cog_button.enabled = False
 window.fullscreen = False
 window.position = Vec2(100, 100)
 
+mod_managers = []
 # Создаем игрока
 player = Player()
 ui = UI()
@@ -42,11 +45,12 @@ render_distance = int(config_manager.get_setting('render-distance'))
 world_height = 8 # Настраиваемая высота мира
 ver = "0.2.0"
 
-save_file_def = f'level{config_manager.get_setting('save-file')}.dat'
+save_file_def = f"level{config_manager.get_setting('save-file')}.dat"
 
 x = random.randrange(1, world_size)
 z = random.randrange(1, world_size)
 player.position = (x, 10, z)
+
 
 # Создаем мир с системой чанков и настройками высоты
 world = World(player=player, chunk_size=chunk_size, world_size=world_size, render_distance=render_distance, world_height=world_height, save_file=save_file_def)
@@ -59,6 +63,16 @@ scene.fog_color = color.rgb(200, 200, 200)  # Цвет тумана (светл�
 scene.fog_density = 0.2 / render_distance  # Плотность тумана, зависящая от расстояния прорисовки
 camera.fog = True  # Включение тумана для камеры
 camera.fog_density = 0.2 / render_distance  # Плотность тумана, зависящая от расстояния прорисовки
+
+
+for mod_file in os.listdir('./mods/'):
+    if mod_file.endswith('.lua'):
+        mod_path = os.path.join('./mods/', mod_file)
+        mod_manager = Mod(world, ui, sound_manager, block_types, player, EntityObject)
+        mod_manager.load_script(mod_path)
+        mod_managers.append(mod_manager)
+
+
 
 skybox = Entity(
     model='sphere',  # используем сферическую модель для skybox
@@ -160,6 +174,9 @@ def hide_menu():
 def generate_new_level():
         hide_menu()
 
+
+        mod_managers.clear()
+
         print(f'Генерация нового уровня')
         
         # Отключаем игрока на время загрузки
@@ -169,6 +186,13 @@ def generate_new_level():
         world.load_level(1)
         
         # Включаем игрока после завершения загрузки
+
+        for mod_file in os.listdir('./mods/'):
+            if mod_file.endswith('.lua'):
+                mod_path = os.path.join('./mods/', mod_file)
+                mod_manager = Mod(world, ui, sound_manager, block_types, player, EntityObject)
+                mod_manager.load_script(mod_path)
+                mod_managers.append(mod_manager)
 
         player.enabled = True
 
@@ -303,6 +327,13 @@ def input(key):
     global selected_block_index
     global EntityObject
 
+    for mod_manager in mod_managers:
+        if mod_manager.on_key:
+            try:
+                mod_manager.on_key(f"{key}")
+            except Exception as e:
+                print(f"Ошибка при выполнении onKey: {e}")
+
     if key == 'right mouse down':
         destroy_block()
     elif key == 'left mouse down':
@@ -369,6 +400,9 @@ def update():
     global update_image_block
 
     if not menu_active:
+        for mod_manager in mod_managers:
+            mod_manager.update()
+
         skybox.position = player.position
         world.update()
 
