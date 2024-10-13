@@ -17,9 +17,20 @@ class ConfigManager:
             self.config.read(self.config_file)
             self.ensure_all_settings()
 
+    def update_setting(self, key, value):
+        if key in self.config['Settings']:
+            self.config['Settings'][key] = value
+            with open(self.config_file, 'w') as configfile:
+                self.config.write(configfile)
+        else:
+            print('Setting not found')
+
     def create_default_config(self):
         self.config['Settings'] = {
             'render-distance': '2',
+            'music':'100',
+            'sounds':'100',
+            'save-file':'1',
             # Добавьте другие параметры по умолчанию здесь
         }
         with open(self.config_file, 'w') as configfile:
@@ -29,6 +40,9 @@ class ConfigManager:
         # Проверяем наличие всех необходимых параметров
         default_settings = {
             'render-distance': '2',
+            'music':'1',
+            'sounds':'1',
+            'save-file':'1',
             # Добавьте другие параметры по умолчанию здесь
         }
 

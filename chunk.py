@@ -2,7 +2,7 @@ from ursina import *
 from block import Block
 
 class Chunk(Entity):
-    def __init__(self, position=(0, 0, 0), size=4, height=4):
+    def __init__(self, position=(0, 0, 0), size=4, height=64):
         super().__init__()
         self.blocks = {}  # Хранение блоков в словаре
         self.size = size
