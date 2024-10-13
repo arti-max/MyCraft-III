@@ -126,7 +126,7 @@ createUi(1, {x=0, y=0}, {x=0.2, y=0.1}, {text='Начать игру', on_click=
 
 ---
 
-### <a name="addBlock"></a>**addBlock(block_id, texture_path)**
+### <a name="addBlock"></a>**addBlock(texture_path, sound_path)**
 
 **Описание:**
 Добавляет новый тип блока в игру.
