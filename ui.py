@@ -13,7 +13,8 @@ class UI:
             position=position,
             scale=scale,
             color=color.white,  # Убедитесь, что цвет белый, чтобы текстура отображалась корректно
-            on_click=on_click
+            on_click=on_click,
+            highlight_color=color.gray
         )
 
         self.elements.append(button)
