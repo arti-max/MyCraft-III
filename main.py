@@ -5,10 +5,12 @@ from ui import UI
 from configManager import ConfigManager
 from soundManager import SoundManager
 from entity import EntityObject
+from playerNetwork import PlayerNetwork
 from mod import Mod
 import random
 import configparser
 import os
+import lupa
 
 app = Ursina(title="MyCraft III", icon="res/stone.ico", development_mode=False, borderless=False)
 window.exit_button.enabled = False
@@ -42,14 +44,18 @@ sound_manager.play_random_music()
 chunk_size = 4
 world_size = 64
 render_distance = int(config_manager.get_setting('render-distance'))
+SERVER_IP = config_manager.get_setting('server-ip')
+SERVER_PORT = int(config_manager.get_setting('server-port'))
+PLAYER_NAME = config_manager.get_setting('player-name')
 world_height = 8 # Настраиваемая высота мира
-ver = "0.2.0"
+ver = "0.3.0"
 
 save_file_def = f"level{config_manager.get_setting('save-file')}.dat"
 
 x = random.randrange(1, world_size)
 z = random.randrange(1, world_size)
 player.position = (x, 10, z)
+player_network = None
 
 
 # Создаем мир с системой чанков и настройками высоты
@@ -63,6 +69,10 @@ scene.fog_color = color.rgb(200, 200, 200)  # Цвет тумана (светл�
 scene.fog_density = 0.2 / render_distance  # Плотность тумана, зависящая от расстояния прорисовки
 camera.fog = True  # Включение тумана для камеры
 camera.fog_density = 0.2 / render_distance  # Плотность тумана, зависящая от расстояния прорисовки
+
+
+if not os.path.exists('./mods'):
+    os.mkdir('./mods')
 
 
 for mod_file in os.listdir('./mods/'):
@@ -100,7 +110,15 @@ def toggle_menu():
 
 def show_menu():
     global menu_active
+    global player_network
     menu_active = True
+    serverText = 'Connect to Server'
+    serverFunc = connect_to_server
+
+    if player_network != None:
+        if player_network.isNetwork:
+            serverText = 'Disconnect'
+            serverFunc = disconnect_from_server
 
     # Создаем кнопки меню
     ui.create_texture_button(
@@ -132,7 +150,22 @@ def show_menu():
         on_click=toggle_menu
     )
 
+    ui.create_texture_button(
+        # Connect to Server
+        position=(0, 0.4),
+        scale=(0.3, 0.1),
+        on_click=serverFunc
+    )
 
+
+
+
+
+    ui.create_text(
+        content=serverText,
+        position=(-0.1, 0.42),
+        scale=1.5
+    )
 
     ui.create_text(
         content='Generate New Level',
@@ -170,6 +203,104 @@ def hide_menu():
     ui.elements.clear()
     menu_active = False
     blockImg = ui.add_image(image_path=f'res/{block_types[selected_block_index]}.png', position=(0.74, 0.43), scale=(0.1, 0.1))
+
+def disconnect_from_server():
+    pass
+
+def connect_to_server():
+    hide_menu()
+    global SERVER_IP
+    global SERVER_PORT
+    global PLAYER_NAME
+    global world
+    global player
+    global ui
+    global background
+
+    background = None
+    player.enabled = False
+
+    background = Entity(
+            model='quad',
+            scale=(20, 15),
+            texture='res/stone.png',
+            texture_scale=(10, 10)
+        )
+    background.texture.wrap_mode = 'repeat'
+    background.z = 1
+
+
+    # Здесь можно добавить ввод IP и порта
+    # Для простоты возьмем IP и порт по умолчанию
+    ip = SERVER_IP
+    port = SERVER_PORT
+    global player_network
+    player_network = PlayerNetwork(ip, port, player, world)
+    print(f'Подключаемся к серверу {ip}:{port}')
+    player_network.client.send_message("getPlayerName", f"{PLAYER_NAME}")
+
+    @player_network.client.event
+    def GetId(Id):
+        player_network.SelfID = Id
+        print(f"My ID is : {player_network.SelfID}")
+
+
+    @player_network.client.event
+    def getWorldList(level):
+        global background
+        #print(level)
+        isWorld = world.load_server_level(level)
+        if isWorld:
+            player.position = Vec3(32, 10, 32)
+            player.enabled = True
+            player_network.setIsNetwork()
+            if background:
+                destroy(background)  # Удаляем фон, если он уже существует
+                background = None
+
+    @player_network.easy.event
+    def onReplicatedVariableCreated(variable):
+        global Client
+        variable_name = variable.name
+        variable_type = variable.content["type"]
+
+        if variable_type == "block":
+
+            variable_inv = variable.content["inv"]
+            if variable_inv == "client":
+                position = variable_name
+                block_type = variable.content["block_type"]
+                world.create_block(position, block_type)
+
+        elif variable_type == "player":
+
+            player_network.PlayersTargetPos[variable_name] = Vec3(5, 10, 5)
+            player_network.PlayersTargetRot[variable_name] = 0
+            player_network.Players[variable_name] = EntityObject(ai=False)
+            if player_network.SelfID == int(variable.content["id"]):
+                player_network.Players[variable_name].color = color.red
+                player_network.Players[variable_name].visible = False
+
+            print(player_network.Players)
+
+    @player_network.easy.event
+    def onReplicatedVariableUpdated(variable):
+        player_network.PlayersTargetPos[variable.name] = variable.content["position"]
+        player_network.PlayersTargetRot[variable.name] = variable.content["rotate"]+90
+
+
+    @player_network.easy.event
+    def onReplicatedVariableRemoved(variable):
+        variable_name = variable.name
+        variable_type = variable.content["type"]
+        if variable_type == "block":
+            world.destroy_block(tuple(variable_name))
+        elif variable_type == "player":
+            destroy(player_network.Players[variable_name])
+            del player_network.Players[variable_name]
+
+
+    #player.enabled = True
 
 def generate_new_level():
         hide_menu()
@@ -326,6 +457,8 @@ def save_level(level_id):
 def input(key):
     global selected_block_index
     global EntityObject
+    global world
+    global player_network
 
     for mod_manager in mod_managers:
         if mod_manager.on_key:
@@ -344,8 +477,8 @@ def input(key):
     elif key == 'scroll down':
         selected_block_index = (selected_block_index - 1) % len(block_types)
         blockImg.texture = f'res/{block_types[selected_block_index]}.png'
-    elif key == 'enter':
-        world.save_world()  # Вызов функции сохранения мира при нажатии Enter
+    # elif key == 'enter':
+    #     world.save_world()  # Вызов функции сохранения мира при нажатии Enter
     elif key == 'r':
         x = random.randrange(1, world_size)
         z = random.randrange(1, world_size)
@@ -358,6 +491,9 @@ def input(key):
         Character = EntityObject(texture_folder='res/Entityes/char', position=player.position)
 
 def place_block():
+    global player_network
+    global block_types
+    global selected_block_index
     selected_block_type = block_types[selected_block_index]
     # Получаем позицию блока, куда игрок смотрит
     hit_info = raycast(camera.world_position, camera.forward, distance=5)
@@ -366,18 +502,26 @@ def place_block():
         position = hit_info.entity.position + hit_info.normal
         try:
             block_type = hit_info.entity.block_type
-            world.create_block(position, selected_block_type)
+            if player_network.isNetwork:
+                #print(block_type)
+                player_network.client.send_message("place_block", {"block_type" : block_types[selected_block_index], "position" : tuple(position)})
+            else:
+                world.create_block(position, selected_block_type)
         except:
             pass
 
 def destroy_block():
+    global player_network
     # Получаем позицию блока, который игрок пытается разрушить
     hit_info = raycast(camera.world_position, camera.forward, distance=5)
     if hit_info.hit and not menu_active:
         position = hit_info.entity.position
         try:
             block_type = hit_info.entity.block_type
-            world.destroy_block(position)
+            if player_network.isNetwork:
+                player_network.client.send_message("replace_block", tuple(position))
+            else:
+                world.destroy_block(position)
             # Проигрываем звук в зависимости от типа блока
             sound_manager.play_sound(block_type)
         except:
@@ -391,6 +535,8 @@ def update_image_block():
     blockImg.texture = f'res/{block_types[selected_block_index]}.png'
 
 
+
+oldRotationCamera = 0
 # Обновление мира каждый кадр
 def update():
 
@@ -398,13 +544,44 @@ def update():
 
     global selected_block_index
     global update_image_block
+    global player
+    global player_network
+    global oldRotationCamera
 
     if not menu_active:
+
+        if player_network != None:
+            if player_network.isConnected:
+                player_network.easy.process_net_events()
+            if player_network.isNetwork:
+                # try:
+                if len(player_network.Players) > 0:
+                    #print(player_network.Players)
+                    if player_network.Players[f"player_{player_network.SelfID}"].position != tuple(player.position):
+                        player_network.client.send_message("MyPosition", tuple(player.position))
+                    if oldRotationCamera != player.rotation_y:
+                        player_network.client.send_message("MyHeadRotate", player.rotation_y)
+                        oldRotationCamera = player.rotation_y
+                    # except Exception as e2: print(f"ex2: {e2}")
+
+                if player.position[1] < -13:
+                    player.position.y = 10
+
+                for p in player_network.Players:
+                    try:
+                        player_network.Players[p].position = Vec3(player_network.PlayersTargetPos[p])
+                        player_network.Players[p].head_rotation_target = player_network.PlayersTargetRot[p]
+                        player_network.Players[p].rotate_noai_head()
+                    except Exception as e: print(f"ex1: {e}")
+        else:
+            pass
         for mod_manager in mod_managers:
             mod_manager.update()
 
         skybox.position = player.position
         world.update()
+
+        #print(player.rotation_y)
 
         if held_keys['1']:
            selected_block_index = 0
@@ -448,5 +625,6 @@ ui.create_text(
 # ambient = AmbientLight()
 # ambient.color = color.rgb(90, 90, 90)  # Настройте интенсивность и цвет окружающего света
 # ambient.parent = sun  # Можно связать Ambient Light с Directional Light, но необязательно
+# print(lupa.__file__)
 
 app.run()

@@ -30,6 +30,37 @@ class World(Entity):
     def set_load_file(self, file_name):
         self.save_file = file_name
 
+    def unload_level(self):
+        global world_dict
+        world_dict.clear()
+
+        for chunk_key in list(self.loaded_chunks):
+            self.unload_chunk(chunk_key)
+
+        # Очистка текущих данных мира
+        self.chunks.clear()
+        self.loaded_chunks.clear()
+
+    def load_server_level(self, level):
+        global world_dict
+        world_dict.clear()
+
+        for chunk_key in list(self.loaded_chunks):
+            self.unload_chunk(chunk_key)
+
+        # Очистка текущих данных мира
+        self.chunks.clear()
+        self.loaded_chunks.clear()
+
+        for block in level:
+            x, y, z, block_type = block
+            world_dict[(x, y, z)] = block_type
+
+
+        self.update_chunks()
+        print(f"Server level loaded")
+        return True
+
     def load_level(self, params=0):
         global world_dict
         world_dict.clear()
@@ -180,6 +211,9 @@ class World(Entity):
             # Удаляем блок из чанка и world_list
             chunk.destroy_block((position[0], position[1], position[2]), world_dict)
             self.remove_from_world_list(position)
+        else:
+            del world_dict[position]
+            self.remove_from_world_list(position)
 
     def create_block(self, position, block_type):
         chunk_coords = self.get_chunk_coords(position)
@@ -189,6 +223,9 @@ class World(Entity):
             # Создаем блок в чанке и добавляем в world_list
             chunk.create_block(local_position, block_type, (position[0], position[1], position[2]), world_dict)
             self.add_to_world_list(position, block_type)
+        else:
+            self.add_to_world_list(position, block_type)
+            world_dict[position] = block_type
 
     def add_to_world_list(self, position, block_type):
         global world_list
@@ -206,6 +243,10 @@ class World(Entity):
 
     def get_local_position(self, position):
         return int(position[0] % self.chunk_size), int(position[1]), int(position[2] % self.chunk_size)
+
+    def get_block_type_at_position(self, position):
+        pos_tuple = (int(position[0]), int(position[1]), int(position[2]))
+        return self.world_dict.get(pos_tuple)
 
     def update(self):
         self.update_chunks()

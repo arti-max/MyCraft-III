@@ -31,6 +31,9 @@ class ConfigManager:
             'music':'100',
             'sounds':'100',
             'save-file':'1',
+            'server-ip':'relegacyx.ddns.net/myCraftServer',
+            'server-port':'25565',
+            'player-name':'player'
             # Добавьте другие параметры по умолчанию здесь
         }
         with open(self.config_file, 'w') as configfile:
@@ -43,6 +46,9 @@ class ConfigManager:
             'music':'1',
             'sounds':'1',
             'save-file':'1',
+            'server-ip':'relegacyx.ddns.net/myCraftServer',
+            'server-port':'25565',
+            'player-name':'player'
             # Добавьте другие параметры по умолчанию здесь
         }
 
