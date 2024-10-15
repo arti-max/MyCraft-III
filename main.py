@@ -311,6 +311,7 @@ def connect_to_server():
     @player_network.client.event
     def setSpawnPos(pos):
         player.position = pos
+        player.air_time = 0
 
 
     @player_network.client.event
@@ -321,6 +322,7 @@ def connect_to_server():
         if isWorld:
             player.air_time = 0
             player.enabled = True
+            player.air_time = 0
             player_network.setIsNetwork()
             if background:
                 destroy(background)  # Удаляем фон, если он уже существует
@@ -535,6 +537,7 @@ def input(key):
     global world
     global player_network
     global mods_enabled
+    global mod_managers
 
     if mods_enabled:
         for mod_manager in mod_managers:
@@ -572,6 +575,9 @@ def place_block():
     global player_network
     global block_types
     global selected_block_index
+    global mods_enabled
+    global mod_managers
+
     selected_block_type = block_types[selected_block_index]
     # Получаем позицию блока, куда игрок смотрит
     hit_info = raycast(camera.world_position, camera.forward, distance=5)
@@ -580,9 +586,10 @@ def place_block():
         position = hit_info.entity.position + hit_info.normal
         try:
             block_type = hit_info.entity.block_type
-            if player_network.isNetwork:
-                #print(block_type)
-                player_network.client.send_message("place_block", {"block_type" : block_types[selected_block_index], "position" : tuple(position)})
+            if player_network != None:
+                if player_network.isNetwork:
+                    #print(block_type)
+                    player_network.client.send_message("place_block", {"block_type" : block_types[selected_block_index], "position" : tuple(position)})
             else:
                 world.create_block(position, selected_block_type)
                 if mods_enabled:
@@ -597,17 +604,19 @@ def place_block():
 
 def destroy_block():
     global player_network
+    global mods_enabled
+    global mod_managers
     # Получаем позицию блока, который игрок пытается разрушить
     hit_info = raycast(camera.world_position, camera.forward, distance=5)
     if hit_info.hit and not menu_active:
         position = hit_info.entity.position
         try:
             block_type = hit_info.entity.block_type
-            if player_network.isNetwork:
-                player_network.client.send_message("replace_block", tuple(position))
+            if player_network != None:
+                if player_network.isNetwork:
+                    player_network.client.send_message("replace_block", tuple(position))
             else:
                 world.destroy_block(position)
-
                 if mods_enabled:
                     for mod_manager in mod_managers:
                         if mod_manager.on_break_blk:
@@ -618,7 +627,7 @@ def destroy_block():
 
             # Проигрываем звук в зависимости от типа блока
             sound_manager.play_sound(block_type)
-        except:
+        except Exception as e:
             pass
 
 def update_image_block():
@@ -722,6 +731,6 @@ ui.create_text(
 # ambient = AmbientLight()
 # ambient.color = color.rgb(90, 90, 90)  # Настройте интенсивность и цвет окружающего света
 # ambient.parent = sun  # Можно связать Ambient Light с Directional Light, но необязательно
-# print(lupa.__file__)
+print(lupa.__file__)
 
 app.run()
