@@ -3,6 +3,7 @@ from ursina import *
 class UI:
     def __init__(self):
         self.elements = []
+        self.texts = []
 
     def create_texture_button(self, text='', texture='res/button.png', position=(0, 0), scale=(0.1, 0.05), on_click=None):
         # Создаем кнопку с заданной текстурой
@@ -29,6 +30,7 @@ class UI:
             font=font
         )
         self.elements.append(text)
+        self.texts.append(text)
         return text
 
     def add_image(self, image_path, position=(0.75, 0.45), scale=(0.1, 0.1)):

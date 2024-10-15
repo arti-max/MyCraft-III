@@ -3,8 +3,7 @@ from ursina import Vec3, Entity
 from entity import EntityObject
 
 class PlayerNetwork:
-    def __init__(self, ip, port, player, world):
-        self.player = player
+    def __init__(self, ip, port):
         self.client = UrsinaNetworkingClient(ip, port)
         self.easy = EasyUrsinaNetworkingClient(self.client)
         self.isConnected = True

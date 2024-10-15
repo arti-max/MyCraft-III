@@ -48,6 +48,7 @@ SERVER_IP = config_manager.get_setting('server-ip')
 SERVER_PORT = int(config_manager.get_setting('server-port'))
 PLAYER_NAME = config_manager.get_setting('player-name')
 world_height = 8 # Настраиваемая высота мира
+mods_enabled = True
 ver = "0.3.0"
 
 save_file_def = f"level{config_manager.get_setting('save-file')}.dat"
@@ -75,12 +76,28 @@ if not os.path.exists('./mods'):
     os.mkdir('./mods')
 
 
-for mod_file in os.listdir('./mods/'):
-    if mod_file.endswith('.lua'):
-        mod_path = os.path.join('./mods/', mod_file)
-        mod_manager = Mod(world, ui, sound_manager, block_types, player, EntityObject)
-        mod_manager.load_script(mod_path)
-        mod_managers.append(mod_manager)
+def load_mods():
+    global mod_managers
+    global mods_enabled
+    mod_managers.clear()
+    
+    if mods_enabled:
+        for mod_file in os.listdir('./mods/'):
+            if mod_file.endswith('.lua'):
+                mod_path = os.path.join('./mods/', mod_file)
+                mod_manager = Mod(world, ui, sound_manager, block_types, player, EntityObject, config_manager)
+                mod_manager.load_script(mod_path)
+                mod_managers.append(mod_manager)
+
+load_mods()
+
+# if mods_enabled:
+#     for mod_file in os.listdir('./mods/'):
+#         if mod_file.endswith('.lua'):
+#             mod_path = os.path.join('./mods/', mod_file)
+#             mod_manager = Mod(world, ui, sound_manager, block_types, player, EntityObject)
+#             mod_manager.load_script(mod_path)
+#             mod_managers.append(mod_manager)
 
 
 
@@ -205,7 +222,35 @@ def hide_menu():
     blockImg = ui.add_image(image_path=f'res/{block_types[selected_block_index]}.png', position=(0.74, 0.43), scale=(0.1, 0.1))
 
 def disconnect_from_server():
-    pass
+    hide_menu()
+    global player_network
+    global mods_enabled
+
+    player_network.isNetwork = False
+    player_network.isConnected = False
+    player_network.client.client.close()
+    player_network = None
+        
+    # Отключаем игрока на время загрузки
+    player.enabled = False
+    
+    
+    # Загрузка мира из указанного файла
+    world.load_level()
+    
+    # Включаем игрока после завершения загрузки
+
+    player.enabled = True
+
+    x = random.randrange(1, world_size)
+    z = random.randrange(1, world_size)
+    player.position = (x, 7, z)
+    player.air_time = 0
+    mods_enabled = True
+    load_mods()
+    
+
+
 
 def connect_to_server():
     hide_menu()
@@ -216,6 +261,13 @@ def connect_to_server():
     global player
     global ui
     global background
+    global mods_enabled
+    mods_enabled = False  # Отключаем загрузку модов
+    
+    # Удаляем загруженные моды
+    for mod_manager in mod_managers:
+        mod_manager.unload()
+    mod_managers.clear()
 
     background = None
     player.enabled = False
@@ -235,14 +287,30 @@ def connect_to_server():
     ip = SERVER_IP
     port = SERVER_PORT
     global player_network
-    player_network = PlayerNetwork(ip, port, player, world)
+    player_network = PlayerNetwork(ip, port)
     print(f'Подключаемся к серверу {ip}:{port}')
     player_network.client.send_message("getPlayerName", f"{PLAYER_NAME}")
+
+    @player_network.client.event
+    def disconnect(_type):
+
+        if _type == "ban":
+            print("you have been banned")
+        elif _type == "name":
+            print("a player with this nickname is already on the server")
+        elif _type == "stop":
+            player("server stopped, disconnecting...")
+
+        disconnect_from_server()
 
     @player_network.client.event
     def GetId(Id):
         player_network.SelfID = Id
         print(f"My ID is : {player_network.SelfID}")
+
+    @player_network.client.event
+    def setSpawnPos(pos):
+        player.position = pos
 
 
     @player_network.client.event
@@ -251,7 +319,7 @@ def connect_to_server():
         #print(level)
         isWorld = world.load_server_level(level)
         if isWorld:
-            player.position = Vec3(32, 10, 32)
+            player.air_time = 0
             player.enabled = True
             player_network.setIsNetwork()
             if background:
@@ -326,10 +394,15 @@ def generate_new_level():
                 mod_managers.append(mod_manager)
 
         player.enabled = True
+        player.air_time = 0
 
         x = random.randrange(1, world_size)
         z = random.randrange(1, world_size)
         player.position = (x, 7, z)
+        player.air_time = 0
+
+        if mods_enabled:
+            load_mods()
 
 def load_level(level_id):
     file_name = f'level{level_id}.dat'
@@ -353,10 +426,12 @@ def load_level(level_id):
         # Включаем игрока после завершения загрузки
 
         player.enabled = True
+        player.air_time = 0
 
         x = random.randrange(1, world_size)
         z = random.randrange(1, world_size)
         player.position = (x, 7, z)
+        player.air_time = 0
         
         print(f'Уровень {level_id} успешно загружен.')
 
@@ -459,13 +534,15 @@ def input(key):
     global EntityObject
     global world
     global player_network
+    global mods_enabled
 
-    for mod_manager in mod_managers:
-        if mod_manager.on_key:
-            try:
-                mod_manager.on_key(f"{key}")
-            except Exception as e:
-                print(f"Ошибка при выполнении onKey: {e}")
+    if mods_enabled:
+        for mod_manager in mod_managers:
+            if mod_manager.on_key:
+                try:
+                    mod_manager.on_key(f"{key}")
+                except Exception as e:
+                    print(f"Ошибка при выполнении onKey: {e}")
 
     if key == 'right mouse down':
         destroy_block()
@@ -482,8 +559,9 @@ def input(key):
     elif key == 'r':
         x = random.randrange(1, world_size)
         z = random.randrange(1, world_size)
-        player.gravity = 0.5
+        player.air_time = 0
         player.position = (x, 10, z)
+        player.air_time = 0
     elif key == 'escape':
         toggle_menu()
 
@@ -507,6 +585,13 @@ def place_block():
                 player_network.client.send_message("place_block", {"block_type" : block_types[selected_block_index], "position" : tuple(position)})
             else:
                 world.create_block(position, selected_block_type)
+                if mods_enabled:
+                    for mod_manager in mod_managers:
+                        if mod_manager.on_place_blk:
+                            try:
+                                mod_manager.on_place_blk(position[0], position[1], position[2])
+                            except Exception as e:
+                                print(f"Error in onPlaceBlk: {e}")
         except:
             pass
 
@@ -522,6 +607,15 @@ def destroy_block():
                 player_network.client.send_message("replace_block", tuple(position))
             else:
                 world.destroy_block(position)
+
+                if mods_enabled:
+                    for mod_manager in mod_managers:
+                        if mod_manager.on_break_blk:
+                            try:
+                                mod_manager.on_break_blk(position[0], position[1], position[2])
+                            except Exception as e:
+                                print(f"Error in onBreakBlk: {e}")
+
             # Проигрываем звук в зависимости от типа блока
             sound_manager.play_sound(block_type)
         except:
@@ -551,32 +645,35 @@ def update():
     if not menu_active:
 
         if player_network != None:
-            if player_network.isConnected:
-                player_network.easy.process_net_events()
-            if player_network.isNetwork:
-                # try:
-                if len(player_network.Players) > 0:
-                    #print(player_network.Players)
-                    if player_network.Players[f"player_{player_network.SelfID}"].position != tuple(player.position):
-                        player_network.client.send_message("MyPosition", tuple(player.position))
-                    if oldRotationCamera != player.rotation_y:
-                        player_network.client.send_message("MyHeadRotate", player.rotation_y)
-                        oldRotationCamera = player.rotation_y
-                    # except Exception as e2: print(f"ex2: {e2}")
+            try:
+                if player_network.isConnected:
+                    player_network.easy.process_net_events()
+                if player_network.isNetwork:
+                    # try:
+                    if len(player_network.Players) > 0:
+                        #print(player_network.Players)
+                        if player_network.Players[f"player_{player_network.SelfID}"].position != tuple(player.position):
+                            player_network.client.send_message("MyPosition", tuple(player.position))
+                        if oldRotationCamera != player.rotation_y:
+                            player_network.client.send_message("MyHeadRotate", player.rotation_y)
+                            oldRotationCamera = player.rotation_y
+                        # except Exception as e2: print(f"ex2: {e2}")
 
-                if player.position[1] < -13:
-                    player.position.y = 10
+                    if player.position[1] < -13:
+                        player.position.y = 10
 
-                for p in player_network.Players:
-                    try:
-                        player_network.Players[p].position = Vec3(player_network.PlayersTargetPos[p])
-                        player_network.Players[p].head_rotation_target = player_network.PlayersTargetRot[p]
-                        player_network.Players[p].rotate_noai_head()
-                    except Exception as e: print(f"ex1: {e}")
+                    for p in player_network.Players:
+                        try:
+                            player_network.Players[p].position = Vec3(player_network.PlayersTargetPos[p])
+                            player_network.Players[p].head_rotation_target = player_network.PlayersTargetRot[p]
+                            player_network.Players[p].rotate_noai_head()
+                        except Exception as e: print(f"ex1: {e}")
+            except:
+                pass
         else:
-            pass
-        for mod_manager in mod_managers:
-            mod_manager.update()
+            if mods_enabled:
+                for mod_manager in mod_managers:
+                    mod_manager.update()
 
         skybox.position = player.position
         world.update()

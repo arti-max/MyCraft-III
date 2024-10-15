@@ -31,7 +31,7 @@ class ConfigManager:
             'music':'100',
             'sounds':'100',
             'save-file':'1',
-            'server-ip':'relegacyx.ddns.net/myCraftServer',
+            'server-ip':'0.0.0.0',
             'server-port':'25565',
             'player-name':'player'
             # Добавьте другие параметры по умолчанию здесь
@@ -46,7 +46,7 @@ class ConfigManager:
             'music':'1',
             'sounds':'1',
             'save-file':'1',
-            'server-ip':'relegacyx.ddns.net/myCraftServer',
+            'server-ip':'0.0.0.0',
             'server-port':'25565',
             'player-name':'player'
             # Добавьте другие параметры по умолчанию здесь
