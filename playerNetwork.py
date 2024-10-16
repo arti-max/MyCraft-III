@@ -1,6 +1,7 @@
 from ursinanetworking import *
 from ursina import Vec3, Entity
 from entity import EntityObject
+from ui import UI
 
 class PlayerNetwork:
     def __init__(self, ip, port):
@@ -12,12 +13,65 @@ class PlayerNetwork:
         self.PlayersTargetPos = {}
         self.PlayersTargetRot = {}
         self.Players = {}
+        self.playerNames = {}
         self.isNetwork = False
+        self.ui = UI()
+        self.isTab = False
+        self.maxOnline = 0
         print('PlayerNetwork inited')
 
     def setIsNetwork(self):
         self.isNetwork = True
 
+    def toggleTab(self):
+        if self.isTab:
+            for element in self.ui.elements:
+                destroy(element)
+            
+            self.ui.elements.clear()
+            self.isTab = False
+        else:
+            connectedCount = 0
+            columns = self.maxOnline // 10 + 1  # Определяем количество колонок в зависимости от maxOnline
+            panel = self.ui.add_image(
+                image_path='res/sky.png',
+                position=(0, 0),
+                scale=(0.7, 0.5),
+                color=(0.1, 0.1, 0.1, 0.6)
+            )
+
+            # Рассчитываем количество игроков в каждой колонке
+            players_per_column = len(self.playerNames) // columns + (1 if len(self.playerNames) % columns else 0)
+
+            # Создаём список для хранения текста каждой колонки
+            columns_text = ['' for _ in range(columns)]
+
+            for idx, player in enumerate(self.playerNames):
+                # Определяем индекс колонки для текущего игрока
+                col_idx = idx // players_per_column
+                columns_text[col_idx] += f'{player}\n'
+                connectedCount += 1
+
+            # Отображаем заголовок
+            text1 = self.ui.create_text(
+                content=f'Connected Players ({connectedCount}/{self.maxOnline})',
+                position=(-0.15, 0.24),
+                scale=2
+            )
+
+            # Определяем позиции колонок
+            start_x = -0.3  # Начальная позиция по оси X
+            column_width = 0.3  # Расстояние между колонками
+
+            for i in range(columns):
+                x_position = start_x + i * column_width
+                text = self.ui.create_text(
+                    content=columns_text[i],
+                    position=(x_position, 0.2),
+                    scale=2
+                )
+
+            self.isTab = True
 
     # def reg_client_func(self):
     #     @self.client.event

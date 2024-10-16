@@ -49,7 +49,7 @@ SERVER_PORT = int(config_manager.get_setting('server-port'))
 PLAYER_NAME = config_manager.get_setting('player-name')
 world_height = 8 # Настраиваемая высота мира
 mods_enabled = True
-ver = "0.3.0"
+ver = "0.3.2"
 
 save_file_def = f"level{config_manager.get_setting('save-file')}.dat"
 
@@ -85,7 +85,7 @@ def load_mods():
         for mod_file in os.listdir('./mods/'):
             if mod_file.endswith('.lua'):
                 mod_path = os.path.join('./mods/', mod_file)
-                mod_manager = Mod(world, ui, sound_manager, block_types, player, EntityObject, config_manager)
+                mod_manager = Mod(world, ui, sound_manager, block_types, player, EntityObject, config_manager, ver)
                 mod_manager.load_script(mod_path)
                 mod_managers.append(mod_manager)
 
@@ -220,11 +220,19 @@ def hide_menu():
     ui.elements.clear()
     menu_active = False
     blockImg = ui.add_image(image_path=f'res/{block_types[selected_block_index]}.png', position=(0.74, 0.43), scale=(0.1, 0.1))
+    ui.create_text(
+        content=f"version: {ver}",
+        position=(-0.78, 0.5),
+        scale=2
+    )
 
 def disconnect_from_server():
     hide_menu()
     global player_network
     global mods_enabled
+
+    if player_network.isTab:
+        player_network.toggleTab()
 
     player_network.isNetwork = False
     player_network.isConnected = False
@@ -290,6 +298,12 @@ def connect_to_server():
     player_network = PlayerNetwork(ip, port)
     print(f'Подключаемся к серверу {ip}:{port}')
     player_network.client.send_message("getPlayerName", f"{PLAYER_NAME}")
+    # player_network.client.send_message("getTabPlayers")
+
+    @player_network.client.event
+    def returnTabPlayers(content):
+        player_network.maxOnline = content["MAX"]
+        player_network.playerNames = content["players"]
 
     @player_network.client.event
     def disconnect(_type):
@@ -300,8 +314,11 @@ def connect_to_server():
             print("a player with this nickname is already on the server")
         elif _type == "stop":
             player("server stopped, disconnecting...")
+        elif _type == "max":
+            player("there are no free slots on the server")
 
         disconnect_from_server()
+
 
     @player_network.client.event
     def GetId(Id):
@@ -351,6 +368,7 @@ def connect_to_server():
                 player_network.Players[variable_name].color = color.red
                 player_network.Players[variable_name].visible = False
 
+            player_network.client.send_message("getTabPlayers", 1)
             print(player_network.Players)
 
     @player_network.easy.event
@@ -366,6 +384,7 @@ def connect_to_server():
         if variable_type == "block":
             world.destroy_block(tuple(variable_name))
         elif variable_type == "player":
+            player_network.client.send_message("getTabPlayers", 1)
             destroy(player_network.Players[variable_name])
             del player_network.Players[variable_name]
 
@@ -547,6 +566,11 @@ def input(key):
                 except Exception as e:
                     print(f"Ошибка при выполнении onKey: {e}")
 
+    if player_network != None:
+        if player_network.isNetwork:
+            if key == "tab":
+                player_network.toggleTab()
+
     if key == 'right mouse down':
         destroy_block()
     elif key == 'left mouse down':
@@ -566,7 +590,10 @@ def input(key):
         player.position = (x, 10, z)
         player.air_time = 0
     elif key == 'escape':
-        toggle_menu()
+        if player_network != None and player_network.isNetwork and player_network.isTab:
+            player_network.toggleTab()
+        else:
+            toggle_menu()
 
     elif key == 'g':
         Character = EntityObject(texture_folder='res/Entityes/char', position=player.position)
